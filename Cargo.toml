@@ -1,0 +1,39 @@
+[package]
+name = "chattr-api"
+version = "1.0.1"
+edition = "2021"
+
+[dependencies]
+dotenv = "0.15.0"
+mobc = "0.7.3" # postgres pooling.
+serde_json = "1.0.74" # JSON support for serde.
+tokio-postgres = "0.7.5" # async postgres.
+dotenv_codegen = "0.15.0"
+cap = "0.1.0"
+futures-util = "0.3.19"
+futures = "0.3.19"
+
+# main http server lib
+[dependencies.warp]
+version = "0.3.2"
+features = ["tls"]
+
+# date time support
+[dependencies.chrono]
+version = "0.4.19"
+features = ["serde"] # for de/serialization date times from/to JSON/structs.
+
+# postgres pooling
+[dependencies.mobc-postgres]
+version = "0.7.0"
+features = ["with-chrono-0_4"] # for support with chrono
+
+# serializations and deserializations (struct <-> JSON)
+[dependencies.serde]
+version = "1.0.133"
+features = ["derive"]
+
+# async support
+[dependencies.tokio]
+version = "1.15.0"
+features = ["full"]
