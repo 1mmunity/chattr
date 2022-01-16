@@ -1,1 +1,1 @@
-web: ./target/release/chattr-api
+web: PORT=$PORT ./target/release/chattr-api
