@@ -30,9 +30,9 @@ static ALLOCATOR: Cap<std::alloc::System> = Cap::new(std::alloc::System, usize::
 #[tokio::main]
 async fn main() {
     let port = std::env::var("PORT")
-    .ok()
-    .map(|val| val.parse::<u16>().unwrap())
-    .unwrap_or(3001);
+    .unwrap_or("3000".into())
+    .parse()
+    .expect("PORT must be a number.");
 
     // let db_pool = init_pool().await;
     // println!("CONNECTED TO DATABASE");
@@ -61,6 +61,8 @@ async fn main() {
     //     .and(with_db(db_pool.clone()))
     //     .and_then(routes::messages::post_to_room)
     // );
+
+    println!("Starting server on PORT {}", port);
 
     warp::serve(routes)
     .bind(([127, 0, 0, 1], port))
