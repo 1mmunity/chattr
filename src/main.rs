@@ -63,10 +63,7 @@ async fn main() {
     // );
 
     warp::serve(routes)
-    .tls()
-    .key_path("./tls/key.pem")
-    .cert_path("./tls/cert.pem")
-    .run(([127, 0, 0, 1], port))
+    .bind(([127, 0, 0, 1], port))
     .await;
 }
 
