@@ -36,8 +36,8 @@ async fn main() {
     .map(|val| val.parse::<u16>().unwrap())
     .unwrap_or(3001);
 
-    let db_pool = init_pool().await;
-    println!("CONNECTED TO DATABASE");
+    // let db_pool = init_pool().await;
+    // println!("CONNECTED TO DATABASE");
 
     let routes = warp::any()
     .and(warp::path::end())
@@ -55,14 +55,14 @@ async fn main() {
                 })
             })
         })
-    )
-    .or(
-        warp::path!("rooms" / i32 / "messages")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and(with_db(db_pool.clone()))
-        .and_then(routes::messages::post_to_room)
     );
+    // .or(
+    //     warp::path!("rooms" / i32 / "messages")
+    //     .and(warp::post())
+    //     .and(warp::body::json())
+    //     .and(with_db(db_pool.clone()))
+    //     .and_then(routes::messages::post_to_room)
+    // );
 
     warp::serve(routes)
     .tls()
