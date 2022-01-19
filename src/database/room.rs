@@ -1,11 +1,12 @@
 use serde::{Serialize, Deserialize};
-use crate::{Date, DbPool, get_db_con};
+use tokio_postgres::Row;
+use crate::{Date, DbCon};
 
 const ROOM_TABLE: &str = "rooms.rooms";
 
 pub enum RoomError {
-  CannotGetDatabaseConnection(crate::Error),
-  CannotCreateRoom(tokio_postgres::Error)
+  CannotCreateRoom(tokio_postgres::Error),
+  RoomNotFound
 }
 
 #[derive(Serialize, Deserialize)]
@@ -18,25 +19,25 @@ struct Room {
 }
 
 impl Room {
-  pub fn new(id: i32, name: String, description: Option<String>, owner_id: i32, created_at: Date) -> Self {
+  pub fn from_row(row: &Row) -> Self {
     Self {
-      id,
-      name,
-      description,
-      owner_id,
-      created_at
+      id: row.get("id"),
+      name: row.get("name"),
+      description: row.get("description"),
+      owner_id: row.get("owner_id"),
+      created_at: row.get("created_at")
     }
   }
 }
 
 struct RoomManager {
-  pub db_pool: DbPool
+  pub db_con: DbCon
 }
 
 impl RoomManager {
-  pub fn new(db_pool: DbPool) -> Self {
+  pub fn new(db_con: DbCon) -> Self {
     Self {
-      db_pool
+      db_con
     }
   }
 
@@ -47,28 +48,41 @@ impl RoomManager {
     owner_id: i32
     // created_at: Date
   ) -> Result<Room, RoomError> {
-    let client = get_db_con(&self.db_pool).await.map_err(RoomError::CannotGetDatabaseConnection)?;
-    let rows = match description {
+    let row = match description {
       Some(v) => {
-        let query = format!("INSERT INTO {} (name, owner_id, description) VALUES ($1, $2, $3) RETURNING *", ROOM_TABLE);
-        client.query(&query, &[&name, &owner_id, &v]).await.map_err(RoomError::CannotCreateRoom)?
+        self.db_con.query_one(&format!("INSERT INTO {} (name, owner_id, description) VALUES ($1, $2, $3) RETURNING *", ROOM_TABLE), &[&name, &owner_id, &v]).await.map_err(RoomError::CannotCreateRoom)?
       },
       None => {
-        let query = format!("INSERT INTO {} (name, owner_id) VALUES ($1, $2) RETURNING *", ROOM_TABLE);
-        client.query(&query, &[&name, &owner_id]).await.map_err(RoomError::CannotCreateRoom)?
+        self.db_con.query_one(&format!("INSERT INTO {} (name, owner_id) VALUES ($1, $2) RETURNING *", ROOM_TABLE), &[&name, &owner_id]).await.map_err(RoomError::CannotCreateRoom)?
       }
     };
     
-    let row = &rows[0];
-    
-    Ok(
-      Room::new(
-        row.get("id"),
-        row.get("name"),
-        row.get("description"),
-        row.get("owner_id"),
-        row.get("created_at")
-      )
-    )
+    Ok(Room::from_row(&row))
+  }
+
+  pub async fn delete_room(
+    &mut self,
+    id: i32
+  ) -> Result<(), RoomError> {
+    self.db_con.query_one(&format!("DELETE {} FROM users WHERE id=$1", ROOM_TABLE), &[&id]).await.map_err(|_| RoomError::RoomNotFound)?;
+    Ok(())
+  }
+
+  pub async fn update_room_name(
+    &mut self,
+    room_id: i32,
+    new_name: String
+  ) -> Result<(), RoomError> {
+    self.db_con.query_one(&format!("UPDATE {} SET name = $1 WHERE id=$2", ROOM_TABLE), &[&new_name, &room_id]).await.map_err(|_| RoomError::RoomNotFound)?;
+    Ok(())
+  }
+
+  pub async fn update_room_description(
+    &mut self,
+    room_id: i32,
+    new_description: String
+  ) -> Result<(), RoomError> {
+    self.db_con.query_one(&format!("UPDATE {} SET description = $1 WHERE id=$2", ROOM_TABLE), &[&new_description, &room_id]).await.map_err(|_| RoomError::RoomNotFound)?;
+    Ok(())
   }
 }

@@ -1,5 +1,5 @@
-INSERT INTO users (username, email, password)
-  VALUES ('Adriel', 'mock@test.com', 'a');
+INSERT INTO users (username, email, password, token)
+  VALUES ('Adriel', 'mock@test.com', 'a', 'g');
 
 --@block
 INSERT INTO rooms.rooms (name, owner_id)

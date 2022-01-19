@@ -3,16 +3,19 @@ extern crate dotenv_codegen;
 
 mod database;
 mod routes;
+mod ws_messages;
+
+use routes::ws;
 
 use mobc::Pool;
+use cap::Cap;
 use mobc_postgres::PgConnectionManager;
+use futures_util::{FutureExt, StreamExt};
+use std::sync::atomic::AtomicUsize;
 use tokio_postgres::{Config, NoTls};
 use warp::{Filter, Rejection};
-use std::convert::Infallible;
 use std::time::Duration;
 use std::str::FromStr;
-use futures_util::{FutureExt, StreamExt};
-use cap::Cap;
 
 pub type Date = chrono::DateTime<chrono::Utc>;
 pub type DbManager = mobc_postgres::PgConnectionManager<tokio_postgres::NoTls>;
@@ -24,6 +27,8 @@ pub enum Error {
     CannotGetDatabaseConnection(mobc::Error<tokio_postgres::Error>)
 }
 
+pub static NEXT_USER_ID: AtomicUsize = AtomicUsize::new(1); 
+
 #[global_allocator]
 static ALLOCATOR: Cap<std::alloc::System> = Cap::new(std::alloc::System, usize::MAX);
 
@@ -34,24 +39,23 @@ async fn main() {
     .parse()
     .expect("PORT must be a number.");
 
-    // let db_pool = init_pool().await;
-    // println!("CONNECTED TO DATABASE");
+    let users = ws::WsClients::default();
 
-    let routes = warp::any()
+    let db_pool = init_pool().await;
+    println!("CONNECTED TO DATABASE");
+
+    let with_db = warp::any().map(move || db_pool.clone());
+    let with_clients = warp::any().map(move || users.clone());
+
+    let rts = warp::any()
     .and(warp::path::end())
     .and_then(routes::health::handler)
     .or(
         warp::path::path("ws")
         .and(warp::ws())
-        .map(|ws: warp::ws::Ws| {
-            ws.on_upgrade(|client| {
-                let (tx, rx) = client.split();
-                rx.forward(tx).map(|res| {
-                    if let Err(e) = res {
-                        eprintln!("websocket error: {:?}", e);
-                    }
-                })
-            })
+        .and(with_clients)
+        .map(|ws: warp::ws::Ws, clients| {
+            ws.on_upgrade(move |socket| routes::ws::connect_user(socket, clients, &NEXT_USER_ID))
         })
     );
     // .or(
@@ -64,12 +68,12 @@ async fn main() {
 
     println!("Starting server on PORT {}", port);
 
-    warp::serve(routes)
+    warp::serve(rts)
     .bind(([0, 0, 0, 0], port))
     .await;
 }
 
-// some database functions
+// database functions
 const DB_POOL_MAX_OPEN: u64 = 32;
 const DB_POOL_MAX_IDLE: u64 = 8;
 const DB_POOL_TIMEOUT_SECONDS: u64 = 15;
@@ -86,8 +90,4 @@ pub async fn init_pool() -> DbPool {
 
 pub async fn get_db_con(db_pool: &DbPool) -> std::result::Result<DbCon, Error> {
     Ok(db_pool.get().await.map_err(Error::CannotGetDatabaseConnection)?)
-}
-
-fn with_db(db_pool: DbPool) -> impl Filter<Extract = (DbPool,), Error = Infallible> + Clone {
-    warp::any().map(move || db_pool.clone())
 }
